@@ -11,4 +11,4 @@ configFile: config file to be used. use "config.ini" if not specified
 * projects: ==> list of project, seperate by comma
 * authors: ==> list of author, separate by comma
 * labels: ==> list of label, seperate by comma
-* export:xlsx ==> list of export file type, seperate by comma (i.e xlsx)
+* exports:xlsx ==> list of export file type, seperate by comma (i.e xlsx)

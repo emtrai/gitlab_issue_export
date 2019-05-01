@@ -9,6 +9,8 @@
 import sys
 import os
 import json
+import xlwt
+import datetime
 #import requests
 
 
@@ -40,7 +42,7 @@ CONFIG_FIELD_GROUPS = "groups"
 CONFIG_FIELD_PROJECTS = "projects"
 CONFIG_FIELD_AUTHORS = "authors"
 CONFIG_FIELD_LABELS = "labels"
-
+CONFIG_FIELD_EXPORTS = "exports"
 
 
 class Config(object):
@@ -53,11 +55,16 @@ class Config(object):
         self.cfg[CONFIG_FIELD_AUTHORS] = []
         self.cfg[CONFIG_FIELD_LABELS] = []
         self.cfg[CONFIG_FIELD_URL] = []
+        self.cfg[CONFIG_FIELD_EXPORTS] = []
         return super(Config, self).__init__()
 
     def getToken(self):
         if (self.cfg.has_key(CONFIG_FIELD_TOKEN)):
             return self.cfg[CONFIG_FIELD_TOKEN]
+        return None
+    def getExports(self):
+        if (self.cfg.has_key(CONFIG_FIELD_EXPORTS)):
+            return self.cfg[CONFIG_FIELD_EXPORTS]
         return None
     def parseFile(self, path):
         """
@@ -360,6 +367,35 @@ def getListIssuesInGroup(groupId):
 def retrieveDataFromServer(url):
     return
 
+def exportToExcel(issueList, path, sheetName, workbook):
+    saveToFile = False
+    if (workbook is None):
+        workbook = xlwt.Workbook()
+        saveToFile = True
+      
+    sheet = workbook.add_sheet(sheetName) 
+    
+    count = 0
+    col = 0
+    row = 0
+    
+    for key, val in issueList.items():
+        col = 0
+        count = count + 1
+        sheet.write(row, col, count)
+        col += 1
+        sheet.write(row, col, key)
+        col += 1
+        sheet.write(row, col, val.title) 
+        row += 1
+    
+    if (saveToFile):
+        workbook.save(path)
+
+    return workbook
+#################################################################
+############################# START EXECUTION ###################
+
 def main():
     """
     Entry function
@@ -397,8 +433,10 @@ def main():
         __lst = getListIssuesInGroup(grp.id)
         issueList.update(__lst.issueList)
     print issueList
+
+    exports = config.getExports()
+    if ("xlsx" in exports):
+        exportToExcel(issueList, getFullFilePath("export.xls"), "issueList", None)
     return
 
-#################################################################
-############################# START EXECUTION ###################
 main()
