@@ -1,20 +1,36 @@
+# Copyright (c) 2019 Ngo Huy Anh
+# License type: Apache Licenses
+# Author: Ngo Huy Anh
+# Email: ngohuyanh@gmail.com, emtrai@gmail.com
+# Created date: Apr. 30 2019
+# Brief: Get issue from gitlab and export to file 
+
+
 import sys
 import os
 import json
 #import requests
+
+
 #gitlab, we have
 #- group: has multi project
 #- project: is a git, has multi issue
 #- issue: for each project
 
+
+# True to enable debug log
 DEBUG = True
+
+# True to use dummy data
 DUMMY_DATA = True
+
+# list of default file name
 DEFAULT_CONFIG = "config.ini"
 GROUPS_TEST_FILE = "groups.json"
 ISSUES_GRP_TEST_FILE = "issues_grp.json"
 PROJECTS_TEST_FILE = "projects.json"
 
-
+# definition
 CONFIG_FIELD_SEPARATE = ":"
 CONFIG_FIELD_VALUE_SPLIT = ","
 CONFIG_FIELD_API = "api"
@@ -324,6 +340,9 @@ def getListProjects(groupId):
 
 
 def getListIssuesInGroup(groupId):
+    """
+    Get list of issue in group
+    """
     data = None
     if (DUMMY_DATA):
         testFile = getFullFilePath(ISSUES_GRP_TEST_FILE)
@@ -342,6 +361,9 @@ def retrieveDataFromServer(url):
     return
 
 def main():
+    """
+    Entry function
+    """
     print 'hello'
     print sys.argv
     print "os name %s" % os.name
