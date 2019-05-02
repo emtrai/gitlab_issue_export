@@ -11,7 +11,7 @@ import os
 import json
 import xlwt
 import datetime
-#import requests
+import requests
 
 
 #gitlab, we have
@@ -24,14 +24,15 @@ import datetime
 DEBUG = True
 
 # True to use dummy data
-DUMMY_DATA = True
+DUMMY_DATA = False #True
 
 # list of default file name
 DEFAULT_CONFIG = "config.ini"
 GROUPS_TEST_FILE = "groups.json"
 ISSUES_GRP_TEST_FILE = "issues_grp.json"
 PROJECTS_TEST_FILE = "projects.json"
-
+DEFAULT_URL = "https://google.com"
+DEFAULT_API = "3"
 # definition
 CONFIG_FIELD_SEPARATE = ":"
 CONFIG_FIELD_VALUE_SPLIT = ","
@@ -43,18 +44,18 @@ CONFIG_FIELD_PROJECTS = "projects"
 CONFIG_FIELD_AUTHORS = "authors"
 CONFIG_FIELD_LABELS = "labels"
 CONFIG_FIELD_EXPORTS = "exports"
-
+CONFIG_FIELD_COMMENT = "#"
 
 class Config(object):
     cfg = {}
     def __init__(self):
-        self.cfg[CONFIG_FIELD_API] = 3
+        self.cfg[CONFIG_FIELD_API] = DEFAULT_API
         self.cfg[CONFIG_FIELD_TOKEN] = ""
         self.cfg[CONFIG_FIELD_GROUPS] = []
         self.cfg[CONFIG_FIELD_PROJECTS] = []
         self.cfg[CONFIG_FIELD_AUTHORS] = []
         self.cfg[CONFIG_FIELD_LABELS] = []
-        self.cfg[CONFIG_FIELD_URL] = []
+        self.cfg[CONFIG_FIELD_URL] = DEFAULT_URL
         self.cfg[CONFIG_FIELD_EXPORTS] = []
         return super(Config, self).__init__()
 
@@ -62,6 +63,15 @@ class Config(object):
         if (self.cfg.has_key(CONFIG_FIELD_TOKEN)):
             return self.cfg[CONFIG_FIELD_TOKEN]
         return None
+    def setToken(self, token):
+        if (token is not None) and (len(token) > 0):
+            self.cfg[CONFIG_FIELD_TOKEN] = token;
+    def getUrl(self):
+        return self.cfg[CONFIG_FIELD_URL]
+
+    def getApi(self):
+        return self.cfg[CONFIG_FIELD_API]
+        
     def getExports(self):
         if (self.cfg.has_key(CONFIG_FIELD_EXPORTS)):
             return self.cfg[CONFIG_FIELD_EXPORTS]
@@ -80,17 +90,24 @@ class Config(object):
                     hdr = str.strip(line[:pos]).lower()
                     #logD("hdr: " + hdr)
                     val = str.strip(line[pos+1:])
+                    if (hdr.startswith(CONFIG_FIELD_COMMENT)):
+                        continue
                     if (len(val) > 0):
                         #logD("val " + val)
                         if (self.cfg.has_key(hdr)):
-                            tmpsVals = val.split(CONFIG_FIELD_VALUE_SPLIT)
-                            vals = []
-                            for item in tmpsVals:
-                                if (len(str.strip(item)) > 0) :
-                                    vals.append(item)
-                            if (vals.count > 0):
-                                self.cfg[hdr] = vals
-                            #logD("vals %s" % vals)
+                            if (isinstance(self.cfg[hdr], list)):
+                                logD("%s is in list type" % hdr)
+                                tmpsVals = val.split(CONFIG_FIELD_VALUE_SPLIT)
+                                vals = []
+                                for item in tmpsVals:
+                                    if (len(str.strip(item)) > 0) :
+                                        vals.append(item)
+                                if (vals.count > 0):
+                                    self.cfg[hdr] = vals
+                                #logD("vals %s" % vals)
+                            else:
+                                logD("%s is no list, it's normal value" % hdr)
+                                self.cfg[hdr] = val
                         
             f.close()
 
@@ -111,9 +128,9 @@ class gitlabUser(object):
     username = ""
 
     def parseData(self, jobj):
-        if ("username" in jobj):
+        if ("username" in jobj) and (jobj["username"] is not None):
             self.username = jobj["username"]
-        if ("name" in jobj):
+        if ("name" in jobj) and (jobj["name"] is not None):
             self.name = jobj["name"]   
 
 class gitlabObj(object):
@@ -240,12 +257,12 @@ class gitlabIssue(gitlabObj):
         if ("created_at" in jobj):
             self.created_at = jobj["created_at"]
         if ("milestone" in jobj):
-            if ("due_date" in jobj["milestone"]):
+            if (jobj["milestone"] is not None) and ("due_date" in jobj["milestone"]):
                 self.milestone_due_date = jobj["milestone"]["due_date"]
-        if ("author" in jobj):
+        if ("author" in jobj) and (jobj["author"] is not None):
             self.author = gitlabUser()
             self.author.parseData(jobj["author"])
-        if ("assignee" in jobj):
+        if ("assignee" in jobj) and (jobj["assignee"] is not None):
             self.assignee = gitlabUser()
             self.assignee.parseData(jobj["assignee"])
                      
@@ -308,8 +325,6 @@ class gitlabIssueList(object):
 
 
 ##################### FUNCIONS DECLARE #####################
-config = Config()
-
 
 
 def logD(str):
@@ -320,12 +335,17 @@ def getFullFilePath(fileName):
     curDir = os.path.dirname(os.path.abspath(__file__))
     testFile = curDir + "/" + fileName
     return testFile
+def getApiUrl(config, path):
+    url = "%s/api/v%s/%s" % (config.getUrl(), config.getApi(), path)
+    return url
 
-def getListGroups():
+
+def getListGroups(config):
     """
     Get list of groups
     """
     data = None
+    grpList = None
     if (DUMMY_DATA):
         curDir = os.path.dirname(os.path.abspath(__file__))
         testFile = getFullFilePath(GROUPS_TEST_FILE)
@@ -333,23 +353,36 @@ def getListGroups():
             data = f.read()
                         
         f.close()
-    #else:
+    else:
         # retrieve data from server
+        url = getApiUrl(config, "groups")
+        logD("URL " + url)
+        token = config.getToken()
+        
+        hdrs = {"PRIVATE-TOKEN":config.getToken()}
+        logD("header %s" % hdrs)
+        resp = requests.get(url, headers=hdrs)
+        logD("resp status_code %s" % resp.status_code)
+        
+        if (resp.status_code == 200):
+            data = resp.content
 
-    if (data is not None):
+    if (data is not None) and (len(data) > 0):
+        logD("data %s" % data)
         grpList = gitlabGroupList()
         grpList.parseData(data)
-
-    return grpList
+        return grpList
+    return None
 
 def getListProjects(groupId):
     return
 
 
-def getListIssuesInGroup(groupId):
+def getListIssuesInGroup(config, groupId):
     """
     Get list of issue in group
     """
+    logD("get list issue of group %s " % groupId)
     data = None
     if (DUMMY_DATA):
         testFile = getFullFilePath(ISSUES_GRP_TEST_FILE)
@@ -357,12 +390,27 @@ def getListIssuesInGroup(groupId):
             data = f.read()
         
         f.close()
+    else:
+        # retrieve data from server
+        url = getApiUrl(config, "groups/%s/issues" % groupId)
+        logD("URL " + url)
+        token = config.getToken()
+        
+        hdrs = {"PRIVATE-TOKEN":config.getToken()}
+        logD("header %s" % hdrs)
+        resp = requests.get(url, headers=hdrs)
+        logD("resp status_code %s" % resp.status_code)
+        
+        if (resp.status_code == 200):
+            data = resp.content
 
-    if (data is not None):
+    if (data is not None) and len(data) > 0:
+        logD("data %s" % data)
         issueLst = gitlabIssueList()
         issueLst.parseData(data)
-
-    return issueLst
+        return issueLst
+    else:
+        return None
 
 def retrieveDataFromServer(url):
     return
@@ -400,21 +448,30 @@ def main():
     """
     Entry function
     """
-    print 'hello'
     print sys.argv
     print "os name %s" % os.name
     #os.chdir(os.path.dirname(__file__))
     #print os.getcwd()
+    configFileName = DEFAULT_CONFIG;
+    if (len(sys.argv) > 1):
+        if (sys.argv[1] is not None):
+            configFileName = sys.argv[1]
     
-    configFile = getFullFilePath(DEFAULT_CONFIG)
+    logD("config name %s" % configFileName)
+
+    configFile = getFullFilePath(configFileName)
+    config = Config()
     config.parseFile(configFile)
-    config.dump()
+    
 
     token = config.getToken()
-    if (token is not None):
-        print token
+    if (token is None) or (len(token) == 0):
+        inputToken = raw_input('Enter private token: ')
+        if (inputToken is not None) and (len(inputToken) > 0):
+            config.setToken(inputToken)
+            token = inputToken
 
-
+    config.dump()
     # 1. get list of groups
     # 2. get list of project of a group
     # 3. get list of issues of project
@@ -423,20 +480,21 @@ def main():
     # 2. get list of issues of a groups
 
 
-    grpList = getListGroups()
+    grpList = getListGroups(config)
 
+    if (grpList is not None):
+        print grpList
 
-    print grpList
+        issueList = {}
+        for grp in grpList.grpList:
+            __lst = getListIssuesInGroup(config, grp.id)
+            if (__lst is not None):
+                issueList.update(__lst.issueList)
+        print issueList
 
-    issueList = {}
-    for grp in grpList.grpList:
-        __lst = getListIssuesInGroup(grp.id)
-        issueList.update(__lst.issueList)
-    print issueList
-
-    exports = config.getExports()
-    if ("xlsx" in exports):
-        exportToExcel(issueList, getFullFilePath("export.xls"), "issueList", None)
+        exports = config.getExports()
+        if ("xlsx" in exports):
+            exportToExcel(issueList, getFullFilePath("export.xls"), "issueList", None)
     return
 
 main()
