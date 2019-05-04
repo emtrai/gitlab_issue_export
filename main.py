@@ -415,8 +415,10 @@ def getListGroups(config):
     """
     Get list of groups
     """
+    print("Retrieve list of group")
     data = None
     grpList = None
+    __grpList = gitlabGroupList()
     if (DUMMY_DATA):
         curDir = os.path.dirname(os.path.abspath(__file__))
         testFile = getFullFilePath(GROUPS_TEST_FILE)
@@ -432,27 +434,49 @@ def getListGroups(config):
         token = config.getToken()
         
         hdrs = {"PRIVATE-TOKEN":config.getToken()}
-        params = {'per_page': 200}
-        logD("header %s" % hdrs)
-        resp = requests.get(url, headers=hdrs, params=params)
-        logD("resp status_code %s" % resp.status_code)
         
-        if (resp.status_code == 200):
-            data = resp.content
+        
+        __totalPage = 0
+        __page = 1
+        while True:
+            logD("Page %d" % (__page))
+            params = {'page': __page}
+            logD("header %s" % hdrs)
+            resp = requests.get(url, headers=hdrs, params=params)
+            logD("resp status_code %s" % resp.status_code)
 
-    if (data is not None) and (len(data) > 0):
-        logD("data %s" % data)
-        __grpList = gitlabGroupList()
-        __grpList.parseData(data)
-        return __grpList
-    return None
+            if (resp.status_code == 200):
+                data = resp.content
+                logD (resp.headers)
+                if (len(resp.headers.get('X-Next-Page')) > 0):
+                    __page = int(resp.headers.get('X-Next-Page'))
+                else:
+                    __page = 0
+                logD("next page %d" % (__page))
+            else:
+                __page = 0
+                break
+
+            if (data is not None) and (len(data) > 0):
+                logD("data %s" % data)
+                __grpList.parseData(data)
+    
+            __totalPage += 1
+            if (__page == 0): #ok, reach end, out
+                break
+            if (__totalPage > 500): # 500 pages? no way, something wrong, out
+                print("SOMETHING WRONG, total is to big, out")
+                break
+    print("Total pages %d" % (__totalPage))
+    return __grpList
 
 def getListProjectsInGroup(config, grp):
     """
     Get list of issue in group
     """
-    logD("get list issue of group %s " % grp.id)
+    print("Retrieve project of group: %s " % grp.name)
     data = None
+    __prjLst = gitlabProjectList(grp)
     if (DUMMY_DATA):
         testFile = getFullFilePath(ISSUES_GRP_TEST_FILE)
         with open (testFile, 'rt') as f:
@@ -460,28 +484,47 @@ def getListProjectsInGroup(config, grp):
         
         f.close()
     else:
-        # TODO: do paging
         # retrieve data from server
         url = getApiUrl(config, "groups/%s/projects" % grp.id)
         logD("URL " + url)
         token = config.getToken()
         
         hdrs = {"PRIVATE-TOKEN":config.getToken()}
-        params = {'per_page': 200}
-        logD("header %s" % hdrs)
-        resp = requests.get(url, headers=hdrs, params=params)
-        logD("resp status_code %s" % resp.status_code)
         
-        if (resp.status_code == 200):
-            data = resp.content
+        __totalPage = 0
+        __page = 1
+        while True:
+            logD("Page %d" % (__page))
+            params = {'page': __page}
+            logD("header %s" % hdrs)
+            resp = requests.get(url, headers=hdrs, params=params)
+            logD("resp status_code %s" % resp.status_code)
 
-    if (data is not None) and len(data) > 0:
-        logD("data %s" % data)
-        __prjLst = gitlabProjectList(grp)
-        __prjLst.parseData(data)
-        return __prjLst
-    else:
-        return None
+            if (resp.status_code == 200):
+                data = resp.content
+                logD (resp.headers)
+                if (len(resp.headers.get('X-Next-Page')) > 0):
+                    __page = int(resp.headers.get('X-Next-Page'))
+                else:
+                    __page = 0
+                logD("next page %d" % (__page))
+            else:
+                __page = 0
+                break
+
+            if (data is not None) and len(data) > 0:
+                logD("data %s" % data)
+                __prjLst.parseData(data)
+    
+            __totalPage += 1
+            if (__page == 0): #ok, reach end, out
+                break
+            if (__totalPage > 500): # 500 pages? no way, something wrong, out
+                print("SOMETHING WRONG, total is to big, out")
+                break
+    print("Total pages %d" % (__totalPage))
+    return __prjLst
+    
 
 
 def getListIssuesInGroup(config, groupId):
@@ -490,6 +533,7 @@ def getListIssuesInGroup(config, groupId):
     """
     logD("get list issue of group %s " % groupId)
     data = None
+    __issueLst = gitlabIssueList()
     if (DUMMY_DATA):
         testFile = getFullFilePath(ISSUES_GRP_TEST_FILE)
         with open (testFile, 'rt') as f:
@@ -504,28 +548,49 @@ def getListIssuesInGroup(config, groupId):
         token = config.getToken()
         
         hdrs = {"PRIVATE-TOKEN":config.getToken()}
-        params = {'per_page': 200}
-        logD("header %s" % hdrs)
-        resp = requests.get(url, headers=hdrs, params=params)
-        logD("resp status_code %s" % resp.status_code)
         
-        if (resp.status_code == 200):
-            data = resp.content
+        __totalPage = 0
+        __page = 1
+        while True:
+            logD("Page %d" % (__page))
+            params = {'page': __page}
+            logD("header %s" % hdrs)
+            resp = requests.get(url, headers=hdrs, params=params)
+            logD("resp status_code %s" % resp.status_code)
 
-    if (data is not None) and len(data) > 0:
-        logD("data %s" % data)
-        __issueLst = gitlabIssueList()
-        __issueLst.parseData(data)
-        return __issueLst
-    else:
-        return None
+            if (resp.status_code == 200):
+                data = resp.content
+                logD (resp.headers)
+                if (len(resp.headers.get('X-Next-Page')) > 0):
+                    __page = int(resp.headers.get('X-Next-Page'))
+                else:
+                    __page = 0
+                logD("next page %d" % (__page))
+            else:
+                __page = 0
+                break
+
+            if (data is not None) and len(data) > 0:
+                logD("data %s" % data)
+                __issueLst.parseData(data)
+    
+            __totalPage += 1
+            logD("Total pages %d" % (__totalPage))
+            if (__page == 0): #ok, reach end, out
+                break
+            if (__totalPage > 500): # 500 pages? no way, something wrong, out
+                print("SOMETHING WRONG, total is to big, out")
+                break
+
+    return __issueLst
 
 def getListIssuesInProject(config, prj):
     """
     Get list of issue in project
     """
-    logD("get list issue of project %s " % prj.id)
+    print("Retrieve issue of project: %s " % prj.name)
     data = None
+    __issueLst = gitlabIssueList(prj)
     if (DUMMY_DATA):
         testFile = getFullFilePath(ISSUES_GRP_TEST_FILE)
         with open (testFile, 'rt') as f:
@@ -539,22 +604,44 @@ def getListIssuesInProject(config, prj):
         token = config.getToken()
         
         hdrs = {"PRIVATE-TOKEN":config.getToken()}
-        logD("header %s" % hdrs)
-        resp = requests.get(url, headers=hdrs)
-        logD("resp status_code %s" % resp.status_code)
         
-        if (resp.status_code == 200):
-            data = resp.content
+        
+        __totalPage = 0
+        __page = 1
+        while True:
+            logD("Page %d" % (__page))
+            params = {'page': __page}
+            logD("header %s" % hdrs)
+            resp = requests.get(url, headers=hdrs, params=params)
+            logD("resp status_code %s" % resp.status_code)
 
-    if (data is not None) and len(data) > 0:
-        logD("data %s" % data)
-        __issueLst = gitlabIssueList(prj)
-        __issueLst.parseData(data)
-        if (__issueLst.issueList is not None):
-            logD ("found %d issues" % len(__issueLst.issueList))
-            return __issueLst
-        
-    return None
+            if (resp.status_code == 200):
+                data = resp.content
+                logD (resp.headers)
+                if (len(resp.headers.get('X-Next-Page')) > 0):
+                    __page = int(resp.headers.get('X-Next-Page'))
+                else:
+                    __page = 0
+                logD("next page %d" % (__page))
+            else:
+                __page = 0
+                break
+
+
+            if (data is not None) and len(data) > 0:
+                logD("data %s" % data)
+                __issueLst.parseData(data)
+                if (__issueLst.issueList is not None):
+                    logD ("found %d issues" % len(__issueLst.issueList))
+
+            __totalPage += 1
+            if (__page == 0): #ok, reach end, out
+                break
+            if (__totalPage > 500): # 500 pages? no way, something wrong, out
+                print("SOMETHING WRONG, total is to big, out")
+                break
+    print("Total pages %d" % (__totalPage))
+    return __issueLst
 
 def retrieveDataFromServer(url):
     return
