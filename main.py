@@ -21,7 +21,7 @@ import requests
 
 
 # True to enable debug log
-DEBUG = True
+DEBUG = False
 
 # True to use dummy data
 DUMMY_DATA = False #True
@@ -33,6 +33,7 @@ ISSUES_GRP_TEST_FILE = "issues_grp.json"
 PROJECTS_TEST_FILE = "projects.json"
 DEFAULT_URL = "https://google.com"
 DEFAULT_API = "3"
+DEFAULT_EXPORT_NAME = "export"
 # definition
 CONFIG_FIELD_SEPARATE = ":"
 CONFIG_FIELD_VALUE_SPLIT = ","
@@ -44,6 +45,7 @@ CONFIG_FIELD_PROJECTS = "projects"
 CONFIG_FIELD_AUTHORS = "authors"
 CONFIG_FIELD_LABELS = "labels"
 CONFIG_FIELD_EXPORTS = "exports"
+CONFIG_FIELD_EXPORTNAME = "exportname"
 CONFIG_FIELD_COMMENT = "#"
 
 class Config(object):
@@ -57,15 +59,22 @@ class Config(object):
         self.cfg[CONFIG_FIELD_LABELS] = []
         self.cfg[CONFIG_FIELD_URL] = DEFAULT_URL
         self.cfg[CONFIG_FIELD_EXPORTS] = []
+        self.cfg[CONFIG_FIELD_EXPORTNAME] = DEFAULT_EXPORT_NAME
         return super(Config, self).__init__()
 
     def getToken(self):
-        if (self.cfg.has_key(CONFIG_FIELD_TOKEN)):
+        if (CONFIG_FIELD_TOKEN in self.cfg):
             return self.cfg[CONFIG_FIELD_TOKEN]
         return None
     def setToken(self, token):
         if (token is not None) and (len(token) > 0):
             self.cfg[CONFIG_FIELD_TOKEN] = token;
+    def isExistIn(self, field, val):
+        if (field in self.cfg):
+            if ((val in self.cfg[field]) or len(self.cfg[field]) == 0):
+                return True
+        return False
+
     def getUrl(self):
         return self.cfg[CONFIG_FIELD_URL]
 
@@ -73,14 +82,21 @@ class Config(object):
         return self.cfg[CONFIG_FIELD_API]
         
     def getExports(self):
-        if (self.cfg.has_key(CONFIG_FIELD_EXPORTS)):
+        if (CONFIG_FIELD_EXPORTS in self.cfg):
             return self.cfg[CONFIG_FIELD_EXPORTS]
         return None
+    
+    def getExportName(self):
+        if (CONFIG_FIELD_EXPORTNAME in self.cfg):
+            if (len(self.cfg[CONFIG_FIELD_EXPORTNAME]) > 0):
+                return self.cfg[CONFIG_FIELD_EXPORTNAME]
+        return DEFAULT_EXPORT_NAME
+
     def parseFile(self, path):
         """
         Parse configuration file
         """
-        print "parse file " + path
+        print ("parse file " + path)
         try:
             with open (path, 'rt') as f:
                 for line in f:
@@ -88,21 +104,21 @@ class Config(object):
                     line = str.strip(line)
                     pos = line.find(CONFIG_FIELD_SEPARATE)
                     hdr = str.strip(line[:pos]).lower()
-                    #logD("hdr: " + hdr)
+                    logD("hdr: " + hdr)
                     val = str.strip(line[pos+1:])
                     if (hdr.startswith(CONFIG_FIELD_COMMENT)):
                         continue
                     if (len(val) > 0):
                         #logD("val " + val)
-                        if (self.cfg.has_key(hdr)):
+                        if (hdr in self.cfg):
                             if (isinstance(self.cfg[hdr], list)):
                                 logD("%s is in list type" % hdr)
                                 tmpsVals = val.split(CONFIG_FIELD_VALUE_SPLIT)
                                 vals = []
                                 for item in tmpsVals:
                                     if (len(str.strip(item)) > 0) :
-                                        vals.append(item)
-                                if (vals.count > 0):
+                                        vals.append(str.strip(item))
+                                if (len(vals) > 0):
                                     self.cfg[hdr] = vals
                                 #logD("vals %s" % vals)
                             else:
@@ -112,14 +128,14 @@ class Config(object):
             f.close()
 
         except:
-            print sys.exc_info()[0]
+            print (sys.exc_info()[0])
      
 
         return
 
     def dump(self):
-        print "config"
-        print self.cfg
+        print ("config")
+        print (self.cfg)
     def __repr__(self):
         return "Config class"
 
@@ -131,7 +147,10 @@ class gitlabUser(object):
         if ("username" in jobj) and (jobj["username"] is not None):
             self.username = jobj["username"]
         if ("name" in jobj) and (jobj["name"] is not None):
-            self.name = jobj["name"]   
+            self.name = jobj["name"]  
+
+    def __repr__(self):
+        return  self.username
 
 class gitlabObj(object):
     """
@@ -202,7 +221,7 @@ class gitlabGroup(gitlabObj):
     
     def toString(self):
         str = super(gitlabGroup, self).toString()
-        if (self.projects.count > 0):
+        if (len(self.projects) > 0):
             for item in self.projects:
                 str += "%s\n" % item
         return str
@@ -211,11 +230,17 @@ class gitlabProject(gitlabObj):
     """
     Gitlab project object
     """
+    grp = None
+
+    def __init__(self, grp):
+        self.grp = grp
+        return super(gitlabProject, self).__init__()
+
     def parseData(self, jobj):
         super(gitlabProject, self).parseData(jobj)
     
     def toString(self):
-        str = super(gitlabGroup, self).toString()
+        str = super(gitlabProject, self).toString()
         return str
 
 class gitlabIssue(gitlabObj):
@@ -228,12 +253,16 @@ class gitlabIssue(gitlabObj):
     description = ""
     state = ""
     assignee = None
-    label = []
+    labels = []
     title = ""
     updated_at = ""
     create_at = ""
     due_date = ""
-
+    prj = None
+    def __init__(self, prj):
+        self.prj = prj
+        self.labels = []
+        return super(gitlabIssue, self).__init__()
     def parseData(self, jobj):
         """
         parse data for issue object
@@ -246,8 +275,6 @@ class gitlabIssue(gitlabObj):
             self.description = jobj["description"]
         if ("state" in jobj):
             self.state = jobj["state"]
-        if ("iid" in jobj):
-            self.iid = jobj["iid"]
         if ("labels" in jobj):
             self.labels = jobj["labels"]
         if ("title" in jobj):
@@ -269,7 +296,8 @@ class gitlabIssue(gitlabObj):
         return
 
     def toString(self):
-        return super(gitlabIssue, self).toString()
+        str = super(gitlabIssue, self).toString() + "title %s " % self.title
+        return str
 
     def __repr__(self):
         return self.toString()
@@ -280,6 +308,9 @@ class gitlabGroupList(object):
     List of gitlab group
     """
     grpList = []
+    def __init__(self):
+        self.grpList = []
+        return super(gitlabGroupList, self).__init__()
     def parseData(self, data):
         __jobj = json.loads(data)
         if (__jobj):
@@ -291,7 +322,7 @@ class gitlabGroupList(object):
 
     def __repr__(self):
         str = ""
-        if (self.grpList.count > 0):
+        if (len(self.grpList) > 0):
             for item in self.grpList:
                 str += "*****\n"
                 str = str + item.toString()
@@ -303,19 +334,29 @@ class gitlabIssueList(object):
     """
     List of gitlab issues
     """
-    issueList = {}
+    issueList = []
+    prj = None
+
+    def __init__(self, prj):
+        self.prj = prj 
+        self.issueList = []
+        return super(gitlabIssueList, self).__init__()
+
     def parseData(self, data):
+        logD("parse data of issue list")
         __jobj = json.loads(data)
         if (__jobj):
             for __item in __jobj:
-                issue = gitlabIssue()
+                issue = gitlabIssue(self.prj)
                 issue.parseData(__item)
+                
                 if (issue.isValid()):
-                    self.issueList[issue.iid] = issue
+                    self.issueList.append(issue)
+                    logD ("parsed issue %s, count %d" % (issue, len(self.issueList)))
 
     def __repr__(self):
         str = ""
-        if (self.issueList.count > 0):
+        if (len(self.issueList) > 0):
             for item in self.issueList:
                 str += "*****\n"
                 str = str + item.toString()
@@ -323,17 +364,47 @@ class gitlabIssueList(object):
             str = "issues empty"
         return str
 
+class gitlabProjectList(object):
+    """
+    List of gitlab project
+    """
+    prjList = []
+    grp = None
+    def __init__(self, grp):
+        self.grp = grp
+        self.prjList = []
+        return super(gitlabProjectList, self).__init__()
+    def parseData(self, data):
+        __jobj = json.loads(data)
+        if (__jobj):
+            for __item in __jobj:
+                prj = gitlabProject(self.grp)
+                prj.parseData(__item)
+                if (prj.isValid()):
+                    self.prjList.append(prj)
 
+    def __repr__(self):
+        str = ""
+        if (len(self.prjList) > 0):
+            for item in self.prjList:
+                str += "\n*****\n"
+                str = str + item.toString()
+        else:
+            str = "prj empty"
+        return str
 ##################### FUNCIONS DECLARE #####################
 
 
 def logD(str):
     if DEBUG:
-        print str
+        print (str)
 
 def getFullFilePath(fileName):
     curDir = os.path.dirname(os.path.abspath(__file__))
-    testFile = curDir + "/" + fileName
+    if (os.name is "nt"): #window
+        testFile = curDir + "\\" + fileName
+    else:
+        testFile = curDir + "/" + fileName
     return testFile
 def getApiUrl(config, path):
     url = "%s/api/v%s/%s" % (config.getUrl(), config.getApi(), path)
@@ -354,14 +425,16 @@ def getListGroups(config):
                         
         f.close()
     else:
+        # TODO: do paging
         # retrieve data from server
         url = getApiUrl(config, "groups")
         logD("URL " + url)
         token = config.getToken()
         
         hdrs = {"PRIVATE-TOKEN":config.getToken()}
+        params = {'per_page': 200}
         logD("header %s" % hdrs)
-        resp = requests.get(url, headers=hdrs)
+        resp = requests.get(url, headers=hdrs, params=params)
         logD("resp status_code %s" % resp.status_code)
         
         if (resp.status_code == 200):
@@ -369,13 +442,46 @@ def getListGroups(config):
 
     if (data is not None) and (len(data) > 0):
         logD("data %s" % data)
-        grpList = gitlabGroupList()
-        grpList.parseData(data)
-        return grpList
+        __grpList = gitlabGroupList()
+        __grpList.parseData(data)
+        return __grpList
     return None
 
-def getListProjects(groupId):
-    return
+def getListProjectsInGroup(config, grp):
+    """
+    Get list of issue in group
+    """
+    logD("get list issue of group %s " % grp.id)
+    data = None
+    if (DUMMY_DATA):
+        testFile = getFullFilePath(ISSUES_GRP_TEST_FILE)
+        with open (testFile, 'rt') as f:
+            data = f.read()
+        
+        f.close()
+    else:
+        # TODO: do paging
+        # retrieve data from server
+        url = getApiUrl(config, "groups/%s/projects" % grp.id)
+        logD("URL " + url)
+        token = config.getToken()
+        
+        hdrs = {"PRIVATE-TOKEN":config.getToken()}
+        params = {'per_page': 200}
+        logD("header %s" % hdrs)
+        resp = requests.get(url, headers=hdrs, params=params)
+        logD("resp status_code %s" % resp.status_code)
+        
+        if (resp.status_code == 200):
+            data = resp.content
+
+    if (data is not None) and len(data) > 0:
+        logD("data %s" % data)
+        __prjLst = gitlabProjectList(grp)
+        __prjLst.parseData(data)
+        return __prjLst
+    else:
+        return None
 
 
 def getListIssuesInGroup(config, groupId):
@@ -391,8 +497,44 @@ def getListIssuesInGroup(config, groupId):
         
         f.close()
     else:
+        # TODO: do paging
         # retrieve data from server
         url = getApiUrl(config, "groups/%s/issues" % groupId)
+        logD("URL " + url)
+        token = config.getToken()
+        
+        hdrs = {"PRIVATE-TOKEN":config.getToken()}
+        params = {'per_page': 200}
+        logD("header %s" % hdrs)
+        resp = requests.get(url, headers=hdrs, params=params)
+        logD("resp status_code %s" % resp.status_code)
+        
+        if (resp.status_code == 200):
+            data = resp.content
+
+    if (data is not None) and len(data) > 0:
+        logD("data %s" % data)
+        __issueLst = gitlabIssueList()
+        __issueLst.parseData(data)
+        return __issueLst
+    else:
+        return None
+
+def getListIssuesInProject(config, prj):
+    """
+    Get list of issue in project
+    """
+    logD("get list issue of project %s " % prj.id)
+    data = None
+    if (DUMMY_DATA):
+        testFile = getFullFilePath(ISSUES_GRP_TEST_FILE)
+        with open (testFile, 'rt') as f:
+            data = f.read()
+        
+        f.close()
+    else:
+        # retrieve data from server
+        url = getApiUrl(config, "projects/%s/issues" % prj.id)
         logD("URL " + url)
         token = config.getToken()
         
@@ -406,16 +548,18 @@ def getListIssuesInGroup(config, groupId):
 
     if (data is not None) and len(data) > 0:
         logD("data %s" % data)
-        issueLst = gitlabIssueList()
-        issueLst.parseData(data)
-        return issueLst
-    else:
-        return None
+        __issueLst = gitlabIssueList(prj)
+        __issueLst.parseData(data)
+        if (__issueLst.issueList is not None):
+            logD ("found %d issues" % len(__issueLst.issueList))
+            return __issueLst
+        
+    return None
 
 def retrieveDataFromServer(url):
     return
 
-def exportToExcel(issueList, path, sheetName, workbook):
+def exportToExcel(config, issueList, path, sheetName, workbook):
     saveToFile = False
     if (workbook is None):
         workbook = xlwt.Workbook()
@@ -426,20 +570,114 @@ def exportToExcel(issueList, path, sheetName, workbook):
     count = 0
     col = 0
     row = 0
+    col = 0
+
+    count = count + 1
+    sheet.write(row, col, "No")
+
+    col += 1
+    sheet.write(row, col, "Id")
+
+    col += 1
+    sheet.write(row, col, "IId")
+
+    col += 1
+    sheet.write(row, col, "title") 
+
+    col += 1
+    sheet.write(row, col, "status") 
+
+    col += 1
+    sheet.write(row, col, "assignee") 
+
+    col += 1
+    sheet.write(row, col, "author")
+
+
+    col += 1
+    sheet.write(row, col, "milestone")
+
+    col += 1
+    sheet.write(row, col, "project")
     
-    for key, val in issueList.items():
-        col = 0
-        count = count + 1
-        sheet.write(row, col, count)
-        col += 1
-        sheet.write(row, col, key)
-        col += 1
-        sheet.write(row, col, val.title) 
+    col += 1
+    sheet.write(row, col, "group")
+
+    col += 1
+    sheet.write(row, col, "created date")
+
+    col += 1
+    sheet.write(row, col, "updated date")
+
+    col += 1
+    sheet.write(row, col, "label")
+    
+    col += 1
+    sheet.write(row, col, "link")
+    
+    for __issue in issueList:
         row += 1
+        col = 0
+        
+        sheet.write(row, col, count)
+
+        col += 1
+        sheet.write(row, col, __issue.id)
+        
+
+        col += 1
+        if (__issue.iid is not None):
+          sheet.write(row, col, __issue.iid)
+
+        col += 1
+        sheet.write(row, col, __issue.title) 
+
+        col += 1
+        sheet.write(row, col, "%s" % __issue.state) 
+
+        col += 1
+        sheet.write(row, col, "%s" % __issue.assignee) 
+
+        col += 1
+        sheet.write(row, col, "%s" % __issue.author) 
+
+
+        col += 1
+        sheet.write(row, col, __issue.milestone_due_date) 
+
+        col += 1
+        sheet.write(row, col, __issue.prj.name) 
+
+        col += 1
+        sheet.write(row, col, __issue.prj.grp.name) 
+
+        col += 1
+        sheet.write(row, col, __issue.created_at) 
+
+        col += 1
+        sheet.write(row, col, __issue.updated_at) 
+
+
+        col += 1
+        sheet.write(row, col, "%s" % __issue.labels) 
+        
+        col += 1
+        __link = "%s/%s/%s/issues/%s" % (config.getUrl(), \
+                                        __issue.prj.grp.name, \
+                                        __issue.prj.name, \
+                                        __issue.iid)
+        sheet.write(row, col, xlwt.Formula('HYPERLINK("{}", "{}")'.format(__link, __link)))
+        #sheet.write(row, col, "%s" % __link) 
+        
+        count += 1
     
     if (saveToFile):
-        workbook.save(path)
-
+        try:
+            workbook.save(path)
+        except:
+            print ("FAILED TO WRITE TO FILE " + path)
+            print ("ERROR %s" % sys.exc_info()[0])
+    
     return workbook
 #################################################################
 ############################# START EXECUTION ###################
@@ -448,8 +686,8 @@ def main():
     """
     Entry function
     """
-    print sys.argv
-    print "os name %s" % os.name
+    print (sys.argv)
+    print ("os name %s" % os.name)
     #os.chdir(os.path.dirname(__file__))
     #print os.getcwd()
     configFileName = DEFAULT_CONFIG;
@@ -475,7 +713,7 @@ def main():
     # 1. get list of groups
     # 2. get list of project of a group
     # 3. get list of issues of project
-    # or
+    # or (api v4)
     # 1. get list of groups
     # 2. get list of issues of a groups
 
@@ -483,18 +721,51 @@ def main():
     grpList = getListGroups(config)
 
     if (grpList is not None):
-        print grpList
+        logD ("list of group %s" % grpList)
 
-        issueList = {}
+        prjList = []
+        noPrj = 0
         for grp in grpList.grpList:
-            __lst = getListIssuesInGroup(config, grp.id)
+            if (config.isExistIn(CONFIG_FIELD_GROUPS, grp.name)):
+                print ("found group %s" % grp.name)
+                __prjLst = None
+                __prjLst = getListProjectsInGroup(config, grp)
+                if (__prjLst is not None):
+                    print ("group %s has %d project" % (grp.name, len(__prjLst.prjList)))
+                    noPrj += len(__prjLst.prjList)
+                    prjList.extend(__prjLst.prjList)
+            else:
+                print ("ignore group %s" % grp.name)
+
+        
+        logD ("list of prj %s" % prjList)
+        print ("number of prj %d, found %d" % (len(prjList), noPrj))
+
+        issueList = []
+        noIssue = 0
+        for __prj in prjList:
+            __lst = getListIssuesInProject(config, __prj)
             if (__lst is not None):
-                issueList.update(__lst.issueList)
-        print issueList
+                print ("project %s has %d issue" % (__prj.name, len(__lst.issueList)))
+                noIssue += len(__lst.issueList)
+                issueList.extend(__lst.issueList)
+            
+        
+        print ("number of issue %d, found %d" % (len(issueList), noIssue))
 
         exports = config.getExports()
-        if ("xlsx" in exports):
-            exportToExcel(issueList, getFullFilePath("export.xls"), "issueList", None)
+        currentDT = datetime.datetime.now()
+        exportFileName = "%s_%s_%s" % (config.getExportName(), \
+                                      os.path.splitext(configFileName)[0], \
+                                      currentDT.strftime("%Y%m%d_%H%M%S"))
+        if ("xlsx" in exports) or ("xls" in exports):
+           
+            path = getFullFilePath("%s.xls" % exportFileName)
+            print("export to excel, path %s" % path)
+            exportToExcel(config, issueList, path, "issueList", None)
+            print("export done")
     return
 
+####################################################################################
+######################################## START RUNNING #############################
 main()
