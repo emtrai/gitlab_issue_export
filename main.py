@@ -1,9 +1,21 @@
 # Copyright (c) 2019 Ngo Huy Anh
-# License type: Apache Licenses
 # Author: Ngo Huy Anh
 # Email: ngohuyanh@gmail.com, emtrai@gmail.com
 # Created date: Apr. 30 2019
-# Brief: Get issue from gitlab and export to file 
+# Brief: Retrieve info from gitlab and export to file 
+
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 
 
 import sys
@@ -19,26 +31,33 @@ import requests
 #- project: is a git, has multi issue
 #- issue: for each project
 
+# gitlab api supports
+APIS_SUPPORT = ["3", "4"]
+EXPORTS_SUPPORT = ["xls", "xlsx"]
 
-# True to enable debug log
+# True to enable debug log, via logD function
 DEBUG = False
 
-# True to use dummy data
+# True to use dummy data, read from file
 DUMMY_DATA = False #True
 
-# param
+# paramameters definition, i.e main.py c=d
 PARAM_SPLIT = "="
 PARAM_INFO_SPLIT = ","
 PARAM_CFG = "c"
 PARAM_INFO = "l"
+#new param? update this list as well
+PARAM_SUPPORT = [PARAM_CFG, PARAM_INFO]
 USAGE = "USAGE: \tpython main.py %s=<val> %s=<val>" % (PARAM_CFG, PARAM_INFO)
+USAGE_API = "Supported GITLAB APIS: %s" % APIS_SUPPORT
 USAGE_PARAM={}
-USAGE_PARAM[PARAM_CFG] = "Specify config file, i.e. config_ABC.ini. Not specify, default is config.ini"
-USAGE_PARAM[PARAM_INFO] = "Specify info to be exported, separate by \",\", i.e. prj (project list), iss(issue), grp(group). Not specify, default is iss,grp,prj"
+USAGE_PARAM[PARAM_CFG] = "Specify config file to be used, i.e. config_ABC.ini.\n\tNot specify, default is config.ini"
+USAGE_PARAM[PARAM_INFO] = "Specify info to be exported, separate by \",\", i.e. prj (project list), iss(issue), grp(group).\n\tNot specify, default is iss,grp,prj"
 
-PARAM_INFO_ISS = "iss"
-PARAM_INFO_PRJ = "prj"
-PARAM_INFO_GRP = "grp"
+
+PARAM_INFO_ISS = "iss" # issue list
+PARAM_INFO_PRJ = "prj" # project list
+PARAM_INFO_GRP = "grp" # group list
 
 # list of default file name
 DEFAULT_CONFIG = "config.ini"
@@ -48,6 +67,7 @@ PROJECTS_TEST_FILE = "projects.json"
 DEFAULT_URL = "https://google.com"
 DEFAULT_API = "3"
 DEFAULT_EXPORT_NAME = "export"
+DEFAULT_EXPORTS = "xls"
 # definition
 CONFIG_FIELD_SEPARATE = ":"
 CONFIG_FIELD_VALUE_SPLIT = ","
@@ -62,9 +82,10 @@ CONFIG_FIELD_EXPORTS = "exports"
 CONFIG_FIELD_EXPORTNAME = "exportname"
 CONFIG_FIELD_COMMENT = "#"
 
-
-
 class Config(object):
+    """
+    Configuration class
+    """
     cfg = {}
     def __init__(self):
         self.cfg[CONFIG_FIELD_API] = DEFAULT_API
@@ -74,35 +95,62 @@ class Config(object):
         self.cfg[CONFIG_FIELD_AUTHORS] = []
         self.cfg[CONFIG_FIELD_LABELS] = []
         self.cfg[CONFIG_FIELD_URL] = DEFAULT_URL
-        self.cfg[CONFIG_FIELD_EXPORTS] = []
+        self.cfg[CONFIG_FIELD_EXPORTS] = [DEFAULT_EXPORTS]
         self.cfg[CONFIG_FIELD_EXPORTNAME] = DEFAULT_EXPORT_NAME
+
         return super(Config, self).__init__()
 
     def getToken(self):
+        """
+        get private token
+        """
         if (CONFIG_FIELD_TOKEN in self.cfg):
             return self.cfg[CONFIG_FIELD_TOKEN]
         return None
+    
     def setToken(self, token):
+        """
+        Set private token
+        """
         if (token is not None) and (len(token) > 0):
             self.cfg[CONFIG_FIELD_TOKEN] = token;
+
+    
     def isExistIn(self, field, val):
+        """
+        Check if value exist in a configuration.
+        If configuration is null, mean it'll exist
+        """
         if (field in self.cfg):
+            # TODO: consider again about the case that configuration's value is empty
             if ((val in self.cfg[field]) or len(self.cfg[field]) == 0):
                 return True
         return False
 
     def getUrl(self):
+        """
+        Get host URL of gitlab
+        """
         return self.cfg[CONFIG_FIELD_URL]
 
     def getApi(self):
+        """
+        Get api version
+        """
         return self.cfg[CONFIG_FIELD_API]
         
     def getExports(self):
+        """
+        Get list of export methods
+        """
         if (CONFIG_FIELD_EXPORTS in self.cfg):
             return self.cfg[CONFIG_FIELD_EXPORTS]
         return None
     
     def getExportName(self):
+        """
+        Get exports name
+        """
         if (CONFIG_FIELD_EXPORTNAME in self.cfg):
             if (len(self.cfg[CONFIG_FIELD_EXPORTNAME]) > 0):
                 return self.cfg[CONFIG_FIELD_EXPORTNAME]
@@ -110,23 +158,29 @@ class Config(object):
 
     def parseFile(self, path):
         """
-        Parse configuration file
+        Parse configuration file. return True if success
         """
         print ("parse file " + path)
         try:
             with open (path, 'rt') as f:
                 for line in f:
-                    #logD("config: " + line)
+                    logD("config: " + line)
+
+                    # read line by line and split it basing on separator
                     line = str.strip(line)
                     pos = line.find(CONFIG_FIELD_SEPARATE)
                     hdr = str.strip(line[:pos]).lower()
                     logD("hdr: " + hdr)
+
                     val = str.strip(line[pos+1:])
+                    # ignore if it's comment
                     if (hdr.startswith(CONFIG_FIELD_COMMENT)):
                         continue
                     if (len(val) > 0):
                         #logD("val " + val)
+                        # check if config is support
                         if (hdr in self.cfg):
+                            # if config is list of iss, separate its value
                             if (isinstance(self.cfg[hdr], list)):
                                 logD("%s is in list type" % hdr)
                                 tmpsVals = val.split(CONFIG_FIELD_VALUE_SPLIT)
@@ -137,17 +191,18 @@ class Config(object):
                                 if (len(vals) > 0):
                                     self.cfg[hdr] = vals
                                 #logD("vals %s" % vals)
-                            else:
+                            else: # or use value directly
                                 logD("%s is no list, it's normal value" % hdr)
                                 self.cfg[hdr] = val
                         
             f.close()
 
         except:
-            print (sys.exc_info()[0])
+            print ("PARSING CONFIG ERROR %s" % sys.exc_info()[0])
+            return False # parsing error
      
-
-        return
+        
+        return True
 
     def dump(self):
         print ("config")
@@ -156,10 +211,16 @@ class Config(object):
         return "Config class"
 
 class gitlabUser(object):
+    """
+    git lab user object
+    """
     name = ""
     username = ""
 
     def parseData(self, jobj):
+        """
+        parse data
+        """
         if ("username" in jobj) and (jobj["username"] is not None):
             self.username = jobj["username"]
         if ("name" in jobj) and (jobj["name"] is not None):
@@ -170,13 +231,14 @@ class gitlabUser(object):
 
 class gitlabObj(object):
     """
-    gitlab commob object
+    gitlab common object
     """
     name = None
-    id = None
+    id = None # uniqe id
     desc = ""
     path = ""
-    iid = None
+    iid = None # id in a group/project, ...
+
     def parseData(self, jobj):
         """
         get data from json object
@@ -221,6 +283,8 @@ class gitlabGroup(gitlabObj):
         Parse json data to get group info
         """
         super(gitlabGroup, self).parseData(jobj)
+
+        # get list of projects if any
         if ("projects" in jobj):
             __jprj = jobj["projects"]
             for __item in jprj:
@@ -246,7 +310,7 @@ class gitlabProject(gitlabObj):
     """
     Gitlab project object
     """
-    grp = None
+    grp = None # group that project belongs to
 
     def __init__(self, grp):
         self.grp = grp
@@ -274,11 +338,14 @@ class gitlabIssue(gitlabObj):
     updated_at = ""
     create_at = ""
     due_date = ""
-    prj = None
+    prj = None # project that issue belong to
+
     def __init__(self, prj):
         self.prj = prj
         self.labels = []
         return super(gitlabIssue, self).__init__()
+
+    
     def parseData(self, jobj):
         """
         parse data for issue object
@@ -416,13 +483,20 @@ def logD(str):
         print (str)
 
 def getFullFilePath(fileName):
+    """
+    get full file path, basing on path of main.py
+    """
     curDir = os.path.dirname(os.path.abspath(__file__))
     if (os.name is "nt"): #window
         testFile = curDir + "\\" + fileName
-    else:
+    else: # posix, like MAC, Linux
         testFile = curDir + "/" + fileName
     return testFile
+
 def getApiUrl(config, path):
+    """
+    get final url to be used
+    """
     url = "%s/api/v%s/%s" % (config.getUrl(), config.getApi(), path)
     return url
 
@@ -434,6 +508,7 @@ def getListGroups(config):
     print("Retrieve list of group")
     data = None
     grpList = None
+
     __grpList = gitlabGroupList()
     if (DUMMY_DATA):
         curDir = os.path.dirname(os.path.abspath(__file__))
@@ -443,7 +518,6 @@ def getListGroups(config):
                         
         f.close()
     else:
-        # TODO: do paging
         # retrieve data from server
         url = getApiUrl(config, "groups")
         logD("URL " + url)
@@ -542,7 +616,7 @@ def getListProjectsInGroup(config, grp):
     return __prjLst
     
 
-
+# for API 4 and beyon only
 def getListIssuesInGroup(config, groupId):
     """
     Get list of issue in group
@@ -557,7 +631,6 @@ def getListIssuesInGroup(config, groupId):
         
         f.close()
     else:
-        # TODO: do paging
         # retrieve data from server
         url = getApiUrl(config, "groups/%s/issues" % groupId)
         logD("URL " + url)
@@ -659,10 +732,10 @@ def getListIssuesInProject(config, prj):
     print("Total pages %d" % (__totalPage))
     return __issueLst
 
-def retrieveDataFromServer(url):
-    return
-
 def exportIssueToExcel(config, issueList, path, workbook):
+    """
+    Export issue list to excel
+    """
     print("Export issue list")
     if (workbook is None):
         workbook = xlwt.Workbook()
@@ -782,6 +855,9 @@ def exportIssueToExcel(config, issueList, path, workbook):
         return workbook
 
 def exportProjectToExcel(config, prjList, path, workbook):
+    """
+    Export project list to excel
+    """
     print("Export project list")
     if (workbook is None):
         workbook = xlwt.Workbook()
@@ -848,6 +924,9 @@ def exportProjectToExcel(config, prjList, path, workbook):
         return workbook
 
 def exportGroupToExcel(config, grpList, path, workbook):
+    """
+    Export group to excel
+    """
     if (workbook is None):
         workbook = xlwt.Workbook()
     
@@ -904,19 +983,32 @@ def exportGroupToExcel(config, grpList, path, workbook):
 
 
 def usage():
+    """
+    Print usages
+    """
     print(USAGE)
+    print(USAGE_API)
+
+    #print paramegers
     for __key, __val in USAGE_PARAM.items():
-        print ("%s \t\t %s" % (__key, __val))
+        print ("%s\t%s" % (__key, __val))
 
 def parseParameter():
+    """
+    Parse input parameters
+    """
     print ("parse parameters %s" % sys.argv)
     __args = {}
     if (len(sys.argv) > 1):
         for arg in sys.argv[1:]:
             __tmp = str.split(arg, PARAM_SPLIT)
             if (__tmp is not None) and (len(__tmp) > 1):
-                if (__tmp[1] is not None) and (len(str.strip(__tmp[1])) > 0):
-                    __args[__tmp[0]] = str.strip(__tmp[1])
+                if (__tmp[0] in PARAM_SUPPORT):
+                    if (__tmp[1] is not None) and (len(str.strip(__tmp[1])) > 0):
+                        __args[__tmp[0]] = str.strip(__tmp[1])
+                else:
+                    usage()
+                    sys.exit("PARAM %s not support" % __tmp[0]) 
             else:
                 return None
     return __args
@@ -932,17 +1024,16 @@ def main():
     
 
     print ("os name %s" % os.name)
+
+    # parse input parameters
     __args = parseParameter()
     if (__args is None):
         usage()
         return
     print("param %s" % __args)
-    #os.chdir(os.path.dirname(__file__))
-    #print os.getcwd()
+    
     configFileName = DEFAULT_CONFIG;
-    #if (len(sys.argv) > 1):
-    #    if (sys.argv[1] is not None):
-    #        configFileName = sys.argv[1]
+    
     reqs = []
     if (PARAM_CFG in __args):
         configFileName = __args[PARAM_CFG]
@@ -954,11 +1045,18 @@ def main():
     print("Request inf: %s" % reqs)
     logD("config name %s" % configFileName)
 
+    # parse configuration file
     configFile = getFullFilePath(configFileName)
     config = Config()
     config.parseFile(configFile)
     
+    print ("API: %s" % config.getApi())
 
+    if (config.getApi() not in APIS_SUPPORT):
+        print ("THIS API VERSION (%s) not support. SUPPORTED APIS IS %s" %(config.getApi(), APIS_SUPPORT))
+        return
+    
+    # get token, ask to input if it's empty
     token = config.getToken()
     if (token is None) or (len(token) == 0):
         inputToken = raw_input('Enter private token: ')
@@ -977,6 +1075,7 @@ def main():
 
     grpList = getListGroups(config)
     useGrp = []
+    # get group lis
     if (grpList is not None):
         logD ("list of group %s" % grpList)
 
@@ -999,7 +1098,7 @@ def main():
         logD ("list of prj %s" % prjList)
         print ("number of prj %d, found %d" % (len(prjList), noPrj))
 
-
+        # get exports methods
         exports = config.getExports()
         currentDT = datetime.datetime.now()
         exportFileName = "%s_%s_%s" % (config.getExportName(), \
@@ -1008,6 +1107,7 @@ def main():
         __issueList = []
         __noIssue = 0
         
+        # get issue data
         if (PARAM_INFO_ISS in reqs):
             for __prj in prjList:
                 __lst = getListIssuesInProject(config, __prj)
@@ -1018,6 +1118,7 @@ def main():
         
         print ("number of issue %d, found %d" % (len(__issueList), __noIssue))
 
+        #export to file
         __exports = config.getExports()
         if ("xlsx" in __exports) or ("xls" in __exports):
             path = getFullFilePath("%s.xls" % exportFileName)
@@ -1030,6 +1131,9 @@ def main():
             if (PARAM_INFO_ISS in reqs):
                 exportIssueToExcel(config, __issueList, path, __workbook)
             print("export done")
+        else:
+            print("ERROR: EXPORT METHOD %s NOT SUPPORTED YET. SUPPORT ONE IS %s" \
+                    % (exports, EXPORTS_SUPPORT))
     return
 
 ####################################################################################

@@ -103,3 +103,4 @@ venv.bak/
 # mypy
 .mypy_cache/
 export.xls
+issue_list_*.xls
