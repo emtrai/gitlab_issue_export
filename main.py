@@ -26,6 +26,20 @@ DEBUG = False
 # True to use dummy data
 DUMMY_DATA = False #True
 
+# param
+PARAM_SPLIT = "="
+PARAM_INFO_SPLIT = ","
+PARAM_CFG = "c"
+PARAM_INFO = "l"
+USAGE = "USAGE: \tpython main.py %s=<val> %s=<val>" % (PARAM_CFG, PARAM_INFO)
+USAGE_PARAM={}
+USAGE_PARAM[PARAM_CFG] = "Specify config file, i.e. config_ABC.ini. Not specify, default is config.ini"
+USAGE_PARAM[PARAM_INFO] = "Specify info to be exported, separate by \",\", i.e. prj (project list), iss(issue), grp(group). Not specify, default is iss,grp,prj"
+
+PARAM_INFO_ISS = "iss"
+PARAM_INFO_PRJ = "prj"
+PARAM_INFO_GRP = "grp"
+
 # list of default file name
 DEFAULT_CONFIG = "config.ini"
 GROUPS_TEST_FILE = "groups.json"
@@ -47,6 +61,8 @@ CONFIG_FIELD_LABELS = "labels"
 CONFIG_FIELD_EXPORTS = "exports"
 CONFIG_FIELD_EXPORTNAME = "exportname"
 CONFIG_FIELD_COMMENT = "#"
+
+
 
 class Config(object):
     cfg = {}
@@ -646,13 +662,12 @@ def getListIssuesInProject(config, prj):
 def retrieveDataFromServer(url):
     return
 
-def exportToExcel(config, issueList, path, sheetName, workbook):
-    saveToFile = False
+def exportIssueToExcel(config, issueList, path, workbook):
+    print("Export issue list")
     if (workbook is None):
         workbook = xlwt.Workbook()
-        saveToFile = True
       
-    sheet = workbook.add_sheet(sheetName) 
+    sheet = workbook.add_sheet("issues") 
     
     count = 0
     col = 0
@@ -758,14 +773,155 @@ def exportToExcel(config, issueList, path, sheetName, workbook):
         
         count += 1
     
-    if (saveToFile):
-        try:
-            workbook.save(path)
-        except:
-            print ("FAILED TO WRITE TO FILE " + path)
-            print ("ERROR %s" % sys.exc_info()[0])
+    try:
+        workbook.save(path)
+    except:
+        print ("FAILED TO WRITE TO FILE " + path)
+        print ("ERROR %s" % sys.exc_info()[0])
+    finally:
+        return workbook
+
+def exportProjectToExcel(config, prjList, path, workbook):
+    print("Export project list")
+    if (workbook is None):
+        workbook = xlwt.Workbook()
+      
+    sheet = workbook.add_sheet("project") 
     
-    return workbook
+    count = 0
+    col = 0
+    row = 0
+    col = 0
+
+    count = count + 1
+    sheet.write(row, col, "No")
+
+    col += 1
+    sheet.write(row, col, "Id")
+
+    col += 1
+    sheet.write(row, col, "IId")
+
+    col += 1
+    sheet.write(row, col, "name") 
+    
+    col += 1
+    sheet.write(row, col, "group")
+    
+    col += 1
+    sheet.write(row, col, "link")
+    
+    for __prj in prjList:
+        row += 1
+        col = 0
+        
+        sheet.write(row, col, count)
+
+        col += 1
+        sheet.write(row, col, __prj.id)
+        
+
+        col += 1
+        if (__prj.iid is not None):
+          sheet.write(row, col, __prj.iid)
+
+        col += 1
+        sheet.write(row, col, __prj.name) 
+
+        col += 1
+        sheet.write(row, col, __prj.grp.name) 
+        
+        col += 1
+        __link = "%s/%s//%s" % (config.getUrl(), \
+                                __prj.grp.name, \
+                                __prj.name)
+        sheet.write(row, col, xlwt.Formula('HYPERLINK("{}", "{}")'.format(__link, __link)))
+
+        count += 1
+    
+    try:
+        workbook.save(path)
+    except:
+        print ("FAILED TO WRITE TO FILE " + path)
+        print ("ERROR %s" % sys.exc_info()[0])
+    finally:
+        return workbook
+
+def exportGroupToExcel(config, grpList, path, workbook):
+    if (workbook is None):
+        workbook = xlwt.Workbook()
+    
+    print("Export group list")
+    sheet = workbook.add_sheet("group") 
+    
+    count = 0
+    col = 0
+    row = 0
+    col = 0
+
+    count = count + 1
+    sheet.write(row, col, "No")
+
+    col += 1
+    sheet.write(row, col, "Id")
+
+    col += 1
+    sheet.write(row, col, "IId")
+
+    col += 1
+    sheet.write(row, col, "name") 
+    
+    for __grp in grpList:
+        row += 1
+        col = 0
+        
+        sheet.write(row, col, count)
+
+        col += 1
+        sheet.write(row, col, __grp.id)
+        
+
+        col += 1
+        if (__grp.iid is not None):
+          sheet.write(row, col, __grp.iid)
+
+        col += 1
+        sheet.write(row, col, __grp.name) 
+        
+        col += 1
+        __link = "%s/%s" % (config.getUrl(), __grp.name)
+        sheet.write(row, col, xlwt.Formula('HYPERLINK("{}", "{}")'.format(__link, __link)))
+
+        count += 1
+    
+    try:
+        workbook.save(path)
+    except:
+        print ("FAILED TO WRITE TO FILE " + path)
+        print ("ERROR %s" % sys.exc_info()[0])
+    finally:
+        return workbook
+
+
+def usage():
+    print(USAGE)
+    for __key, __val in USAGE_PARAM.items():
+        print ("%s \t\t %s" % (__key, __val))
+
+def parseParameter():
+    print ("parse parameters %s" % sys.argv)
+    __args = {}
+    if (len(sys.argv) > 1):
+        for arg in sys.argv[1:]:
+            __tmp = str.split(arg, PARAM_SPLIT)
+            if (__tmp is not None) and (len(__tmp) > 1):
+                if (__tmp[1] is not None) and (len(str.strip(__tmp[1])) > 0):
+                    __args[__tmp[0]] = str.strip(__tmp[1])
+            else:
+                return None
+    return __args
+
+
 #################################################################
 ############################# START EXECUTION ###################
 
@@ -773,15 +929,29 @@ def main():
     """
     Entry function
     """
-    print (sys.argv)
+    
+
     print ("os name %s" % os.name)
+    __args = parseParameter()
+    if (__args is None):
+        usage()
+        return
+    print("param %s" % __args)
     #os.chdir(os.path.dirname(__file__))
     #print os.getcwd()
     configFileName = DEFAULT_CONFIG;
-    if (len(sys.argv) > 1):
-        if (sys.argv[1] is not None):
-            configFileName = sys.argv[1]
+    #if (len(sys.argv) > 1):
+    #    if (sys.argv[1] is not None):
+    #        configFileName = sys.argv[1]
+    reqs = []
+    if (PARAM_CFG in __args):
+        configFileName = __args[PARAM_CFG]
+    if (PARAM_INFO in __args):
+        reqs = str.split(__args[PARAM_INFO], PARAM_INFO_SPLIT)
+    else:
+        reqs = [PARAM_INFO_ISS, PARAM_INFO_PRJ, PARAM_INFO_GRP]
     
+    print("Request inf: %s" % reqs)
     logD("config name %s" % configFileName)
 
     configFile = getFullFilePath(configFileName)
@@ -806,7 +976,7 @@ def main():
 
 
     grpList = getListGroups(config)
-
+    useGrp = []
     if (grpList is not None):
         logD ("list of group %s" % grpList)
 
@@ -814,6 +984,7 @@ def main():
         noPrj = 0
         for grp in grpList.grpList:
             if (config.isExistIn(CONFIG_FIELD_GROUPS, grp.name)):
+                useGrp.append(grp)
                 print ("found group %s" % grp.name)
                 __prjLst = None
                 __prjLst = getListProjectsInGroup(config, grp)
@@ -828,28 +999,36 @@ def main():
         logD ("list of prj %s" % prjList)
         print ("number of prj %d, found %d" % (len(prjList), noPrj))
 
-        issueList = []
-        noIssue = 0
-        for __prj in prjList:
-            __lst = getListIssuesInProject(config, __prj)
-            if (__lst is not None):
-                print ("project %s has %d issue" % (__prj.name, len(__lst.issueList)))
-                noIssue += len(__lst.issueList)
-                issueList.extend(__lst.issueList)
-            
-        
-        print ("number of issue %d, found %d" % (len(issueList), noIssue))
 
         exports = config.getExports()
         currentDT = datetime.datetime.now()
         exportFileName = "%s_%s_%s" % (config.getExportName(), \
                                       os.path.splitext(configFileName)[0], \
                                       currentDT.strftime("%Y%m%d_%H%M%S"))
-        if ("xlsx" in exports) or ("xls" in exports):
-           
+        __issueList = []
+        __noIssue = 0
+        
+        if (PARAM_INFO_ISS in reqs):
+            for __prj in prjList:
+                __lst = getListIssuesInProject(config, __prj)
+                if (__lst is not None):
+                    print ("project %s has %d issue" % (__prj.name, len(__lst.issueList)))
+                    __noIssue += len(__lst.issueList)
+                    __issueList.extend(__lst.issueList)
+        
+        print ("number of issue %d, found %d" % (len(__issueList), __noIssue))
+
+        __exports = config.getExports()
+        if ("xlsx" in __exports) or ("xls" in __exports):
             path = getFullFilePath("%s.xls" % exportFileName)
             print("export to excel, path %s" % path)
-            exportToExcel(config, issueList, path, "issueList", None)
+            __workbook = None
+            if (PARAM_INFO_GRP in reqs):
+                __workbook = exportGroupToExcel(config, useGrp, path, __workbook)
+            if (PARAM_INFO_PRJ in reqs):
+                 __workbook = exportProjectToExcel(config, prjList, path, __workbook)
+            if (PARAM_INFO_ISS in reqs):
+                exportIssueToExcel(config, __issueList, path, __workbook)
             print("export done")
     return
 
