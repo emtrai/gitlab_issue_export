@@ -75,6 +75,9 @@ CONFIG_FIELD_API = "api"
 CONFIG_FIELD_URL = "url"
 CONFIG_FIELD_TOKEN = "token"
 CONFIG_FIELD_GROUPS = "groups"
+CONFIG_FIELD_GROUP_MAX = "maxgroup"
+CONFIG_FIELD_PROJECT_MAX = "maxproject"
+CONFIG_FIELD_ISSUE_MAX = "maxissue"
 CONFIG_FIELD_PROJECTS = "projects"
 CONFIG_FIELD_AUTHORS = "authors"
 CONFIG_FIELD_LABELS = "labels"
@@ -97,8 +100,42 @@ class Config(object):
         self.cfg[CONFIG_FIELD_URL] = DEFAULT_URL
         self.cfg[CONFIG_FIELD_EXPORTS] = [DEFAULT_EXPORTS]
         self.cfg[CONFIG_FIELD_EXPORTNAME] = DEFAULT_EXPORT_NAME
+        self.cfg[CONFIG_FIELD_GROUP_MAX] = ""
+        self.cfg[CONFIG_FIELD_PROJECT_MAX] = ""
+        self.cfg[CONFIG_FIELD_ISSUE_MAX] = ""
 
         return super(Config, self).__init__()
+
+    def getMaxValue(self, hdr):
+        """
+        get the number of item to be get
+        """
+        logD("get max number of %s" % hdr)
+        if (hdr in self.cfg) and len(self.cfg[hdr]) > 0:
+            __val = int(self.cfg[hdr])
+            logD("max val %d" % __val)
+            return __val
+        else:
+            logD("max val is.. infinity")
+            return None
+    
+    def getMaxIssue(self):
+        """
+        get the number of issues to be get
+        """
+        return self.getMaxValue(CONFIG_FIELD_ISSUE_MAX)
+
+    def getMaxProject(self):
+        """
+        get the number of issues to be get
+        """
+        return self.getMaxValue(CONFIG_FIELD_PROJECT_MAX)
+
+    def getMaxGroup(self):
+        """
+        get the number of issues to be get
+        """
+        return self.getMaxValue(CONFIG_FIELD_GROUP_MAX)
 
     def getToken(self):
         """
@@ -394,6 +431,11 @@ class gitlabGroupList(object):
     def __init__(self):
         self.grpList = []
         return super(gitlabGroupList, self).__init__()
+
+    def getLen(self):
+        logD("grp len %d" % len(self.grpList))
+        return len(self.grpList)
+
     def parseData(self, data):
         __jobj = json.loads(data)
         if (__jobj):
@@ -420,6 +462,10 @@ class gitlabIssueList(object):
     issueList = []
     prj = None
 
+    def getLen(self):
+        logD("issue len %d" % len(self.issueList))
+        return len(self.issueList)
+        
     def __init__(self, prj):
         self.prj = prj 
         self.issueList = []
@@ -457,6 +503,11 @@ class gitlabProjectList(object):
         self.grp = grp
         self.prjList = []
         return super(gitlabProjectList, self).__init__()
+
+    def getLen(self):
+        logD("prj len %d" % len(self.prjList))
+        return len(self.prjList)
+        
     def parseData(self, data):
         __jobj = json.loads(data)
         if (__jobj):
@@ -551,7 +602,12 @@ def getListGroups(config):
                 logD("data %s" % data)
                 __grpList.parseData(data)
     
+            
             __totalPage += 1
+            if (config.getMaxGroup() is not None) and (__grpList.getLen() >= config.getMaxGroup()):
+                print("Reach max %s/%s" % (__grpList.getLen(), config.getMaxGroup()))
+                break
+
             if (__page == 0): #ok, reach end, out
                 break
             if (__totalPage > 500): # 500 pages? no way, something wrong, out
@@ -606,7 +662,13 @@ def getListProjectsInGroup(config, grp):
                 logD("data %s" % data)
                 __prjLst.parseData(data)
     
+            
             __totalPage += 1
+
+            if (config.getMaxProject() is not None) and (__prjLst.getLen() >= config.getMaxProject()):
+                print("Reach max %s/%s" % (__prjLst.getLen(), config.getMaxProject()))
+                break
+
             if (__page == 0): #ok, reach end, out
                 break
             if (__totalPage > 500): # 500 pages? no way, something wrong, out
@@ -665,6 +727,11 @@ def getListIssuesInGroup(config, groupId):
     
             __totalPage += 1
             logD("Total pages %d" % (__totalPage))
+
+            if (config.getMaxIssue() is not None) and (__issueLst.getLen() >= config.getMaxIssue()):
+                print("Reach max %s/%s" % (__issueLst.getLen(), config.getMaxIssue()))
+                break
+
             if (__page == 0): #ok, reach end, out
                 break
             if (__totalPage > 500): # 500 pages? no way, something wrong, out
@@ -723,7 +790,13 @@ def getListIssuesInProject(config, prj):
                 if (__issueLst.issueList is not None):
                     logD ("found %d issues" % len(__issueLst.issueList))
 
+            
+
             __totalPage += 1
+
+            if (config.getMaxIssue() is not None) and (__issueLst.getLen() >= config.getMaxIssue()):
+                print("Reach max %s/%s" % (__issueLst.getLen(), config.getMaxIssue()))
+                break
             if (__page == 0): #ok, reach end, out
                 break
             if (__totalPage > 500): # 500 pages? no way, something wrong, out
@@ -1081,16 +1154,18 @@ def main():
 
         prjList = []
         noPrj = 0
+        
         for grp in grpList.grpList:
             if (config.isExistIn(CONFIG_FIELD_GROUPS, grp.name)):
                 useGrp.append(grp)
                 print ("found group %s" % grp.name)
-                __prjLst = None
-                __prjLst = getListProjectsInGroup(config, grp)
-                if (__prjLst is not None):
-                    print ("group %s has %d project" % (grp.name, len(__prjLst.prjList)))
-                    noPrj += len(__prjLst.prjList)
-                    prjList.extend(__prjLst.prjList)
+                if (PARAM_INFO_ISS in reqs) or (PARAM_INFO_PRJ in reqs):
+                    __prjLst = None
+                    __prjLst = getListProjectsInGroup(config, grp)
+                    if (__prjLst is not None):
+                        print ("group %s has %d project" % (grp.name, len(__prjLst.prjList)))
+                        noPrj += len(__prjLst.prjList)
+                        prjList.extend(__prjLst.prjList)
             else:
                 print ("ignore group %s" % grp.name)
 
