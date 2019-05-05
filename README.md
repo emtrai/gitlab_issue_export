@@ -9,9 +9,9 @@ configFile: config file to be used. use "config.ini" if not specified
 - api: api version of gitlab to be used, i.e. 3
 - url: URL of gitlab, this is host domain
 - token: private token, so that we can retrieve info, if need. This should be secret
--        if not specified, program will ask for the input from commandline
--        WARNING: consider carefully when input token in config file!!!!
--        TOKEN IS SECRET ONE, CONSIDER CAREFULLY, DO WITH CARE. I DONT CARE YOU
+        if not specified, program will ask for the input from commandline
+        WARNING: consider carefully when input token in config file!!!!
+        TOKEN IS SECRET ONE, CONSIDER CAREFULLY, DO WITH CARE. I DONT CARE YOU
 - groups: list of groups to be get (group name), separate by comma. If not specified, all groups will be get
 - projects: list of projects to be get (name), separate by comma. If not specified, all projects will be get
 - authors: list of authors to be get ( name), separate by comma. If not specified, all authors will be get
