@@ -1132,7 +1132,10 @@ def main():
     # get token, ask to input if it's empty
     token = config.getToken()
     if (token is None) or (len(token) == 0):
-        inputToken = raw_input('Enter private token: ')
+        if (sys.version_info < (3,0)):
+            inputToken = raw_input('Enter private token: ')
+        else:
+            inputToken = input('Enter private token: ')
         if (inputToken is not None) and (len(inputToken) > 0):
             config.setToken(inputToken)
             token = inputToken
